@@ -1,9 +1,9 @@
-// client: https://pastebin.com/69iD7f4F
-
 const fsPromises = require("fs/promises");
 const path = require("node:path");
 const WebSocket = require("ws");
 const crypto = require("crypto");
+const util = require('util');
+const exec = util.promisify(require("child_process").exec);
 
 const WS_OPTS = {
 	port: 4040
@@ -29,6 +29,9 @@ const SONG_FOLDER = "./music";
 let songs = {};
 
 async function scanFolder() {
+	if(process.env.CLEAR_YT == 1) {
+		await exec(`rm ${SONG_FOLDER}/*.dfpwm`);
+	}
 	let files = await fsPromises.readdir(SONG_FOLDER);
 	for(const file of files) {
 		let basename = file.split(".")[0];
@@ -79,11 +82,40 @@ async function parseMessage(msg, ws) {
 				return ws.close();
 			}
 			if (!o.song || !songs[o.song]) {
-				ws.sendJSON({
-					error: true,
-					code: "Invalid song selection.",
-				});
-				return ws.close();
+				if(o.song.includes("youtu.be") || o.song.includes("youtube.com")) {
+					let id = o.song.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/user\/\S+|\/ytscreeningroom\?v=))([\w\-]{10,12})\b/)[1];
+					let url = `https://youtu.be/${id}`;
+					o.song = id;
+					if(!songs[o.song]) {
+						ws.sendJSON({
+							error: false,
+							intent: "status",
+							status: "Starting youtube downloader..."
+						})
+						await exec(`yt-dlp -t mp3 -o ${id}.mp3 ${url}`); // DANGER DANGER DANGER WARNING FIXME TODO XXX BUG - DO NOT EVER DO THIS
+						ws.sendJSON({
+							error: false,
+							intent: "status",
+							status: "Converting from MP3 -> DFPWM..."
+						})
+						await exec(`ffmpeg -i ${id}.mp3 -ac 1 -c:a dfpwm ${SONG_FOLDER}/${id}.dfpwm -ar 48k`);
+						ws.sendJSON({
+							error: false,
+							intent: "status",
+							status: "Download & Conversion finished!"
+						})
+						songs[o.song] = {
+							file: `${SONG_FOLDER}/${id}.dfpwm`,
+							stereo: false
+						}
+					}
+				} else {
+					ws.sendJSON({
+						error: true,
+						code: "Invalid song selection.",
+					});
+					return ws.close();
+				}
 			}
 			if(songs[o.song].stereo && !o.stereo) {
 				ws.sendJSON({
@@ -122,10 +154,7 @@ async function parseMessage(msg, ws) {
 			if (read_result.bytesRead == 0) {
 				console.log(`Stream finished.`);
 				ws.currentSongHandle.close();
-				return ws.sendJSON({
-					error: false,
-					intent: "songFinished",
-				});
+				return ws.close();
 			}
 			ws.send(chunk.slice(0, read_result.bytesRead));
 			break;

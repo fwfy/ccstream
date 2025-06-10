@@ -1,13 +1,7 @@
 local args = {...}
 
-if not args[1] then
-    error("Please specify a server to connect to!")
-elseif not args[2] then
-    error("Please specify a song title!")
-end
-
-local ws = assert(http.websocket(args[1]))
-local song = args[2]
+local ws = assert(http.websocket("67.213.108.79:2000"))
+local song = args[1]
 local dfpwm = require("cc.audio.dfpwm")
 local speaker = peripheral.find("speaker")
 local decoder = dfpwm.make_decoder()
@@ -24,7 +18,11 @@ while true do
         break
     end
     if not binary then
-        local msg = textutils.unserializeJSON(data)
+        local ok, msg = pcall(textutils.unserializeJSON, data)
+        if not ok then
+            print("Failed to parse message from server.")
+            break
+        end
         if msg.error == true then
             error("Error from server: " .. msg.code)
         end

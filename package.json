@@ -1,5 +1,9 @@
 {
   "dependencies": {
+    "@fwfy/connector": "^1.4.6",
+    "commander": "^14.0.0",
+    "download": "^8.0.0",
+    "get-video-id": "^4.1.7",
     "ws": "^8.18.2"
   },
   "devDependencies": {
